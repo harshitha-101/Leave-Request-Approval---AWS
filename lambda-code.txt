@@ -1,0 +1,65 @@
+import boto3
+import json
+
+def lambda_handler(event, context):
+    subject = "Your Leave Acceptance"
+    # Get the email address from the event
+    email = event['Email']
+    print(f"Email: {email}")
+
+    # Get the leave request information from the event
+    name = event['Name']
+    leave_type = event['leave_type']
+    start_date = event['start_date']
+    end_date = event['end_date']
+    print(f"Name: {name}, Leave type: {leave_type}, Start date: {start_date}, End date: {end_date}, further queries contact: 9347830668")
+
+    # Check if the email is a verified identity in SES
+    ses_client = boto3.client('ses')
+    response = ses_client.list_identities(IdentityType='EmailAddress')
+    verified_emails = response['Identities']
+    if email not in verified_emails:
+        # If the email is not already verified, send a verification request
+        ses_client.verify_email_identity(EmailAddress=email)
+        return f"You will soon receive a confirmation link at {email}, Please accept and try again with same {email}"
+
+    # Update the status in DynamoDB
+    table_name = 'leaveapplication'
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(table_name)
+    response = table.put_item(
+        Item={
+            'Email': email,
+            'Name': name,
+            'leave_type': leave_type,
+            'start_date': start_date,
+            'end_date': end_date,
+            'Status': 'Approved'
+        }
+    )
+    print(f"Update response: {response}")
+
+    # Send email using the AWS SES client
+    message = f" Dear {name}, Your {leave_type} leave request from {start_date} to {end_date} has been approved, further queries contact: 9347830668"
+    print(f"Message: {message}")
+    response = ses_client.send_email(
+        Source="harshithasaisri334@gmail.com",
+        Destination={
+            'ToAddresses': [
+                email,
+            ]
+        },
+        Message={
+            'Subject': {
+                'Data': subject
+            },
+            'Body': {
+                'Text': {
+                    'Data': message
+                }
+            }
+        }
+    )
+    print(f"SES response: {response}")
+
+    return f"Leave request has been recived to management, a confirmation mail is sent to you shortly..."
